@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.23' # <-- 升级 Go 版本
+          go-version: '1.23'
 
       - name: Run sync script
         env:
@@ -29,5 +29,4 @@ jobs:
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
           WEBDAV_BASE_PATH: ${{ secrets.WEBDAV_BASE_PATH }}
-          HTTP_PROXY_URL: ${{ secrets.HTTP_PROXY_URL }} # 支持代理
         run: go run cmd/sync/main.go

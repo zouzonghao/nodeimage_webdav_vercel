@@ -33,17 +33,11 @@ func main() {
 	if webdavURL == "" {
 		webdavURL = "https://dav.jianguoyun.com/dav"
 	}
-	httpProxyURL := os.Getenv("HTTP_PROXY_URL")
 
 	// 验证必填项
 	if nodeImageCookie == "" || webdavUsername == "" || webdavPassword == "" || webdavBasePath == "" {
 		log.Error("错误：必需的环境变量 NODEIMAGE_COOKIE, WEBDAV_USERNAME, WEBDAV_PASSWORD, WEBDAV_BASE_PATH 未完全设置。")
 		os.Exit(1)
-	}
-
-	// 设置代理环境变量，以便 nodeimage 客户端可以读取
-	if httpProxyURL != "" {
-		os.Setenv("HTTP_PROXY_URL", httpProxyURL)
 	}
 
 	// 执行同步逻辑

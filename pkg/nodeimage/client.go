@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
 	"time"
 
 	"nodeimage_webdav_vercel/pkg/logger"
@@ -38,34 +36,18 @@ type APIResponse struct {
 
 // Client 是一个用于与 NodeImage API 交互的客户端。
 type Client struct {
-	httpClient *http.Client  // 用于发送 HTTP 请求的客户端
-	cookie     string        // 用于 API 认证的 Cookie
-	baseURL    string        // NodeImage API 的基础 URL
-	logger     logger.Logger // 日志记录器
-	stats      *stats.Stats  // 流量统计器
+	httpClient *http.Client
+	cookie     string
+	baseURL    string
+	logger     logger.Logger
+	stats      *stats.Stats
 }
 
 // NewClient 创建一个新的 NodeImage API 客户端实例。
 func NewClient(cookie, baseURL string, logger logger.Logger, stats *stats.Stats) *Client {
-	// 检查环境变量中是否配置了代理
-	proxyStr := os.Getenv("HTTP_PROXY_URL")
-	var transport *http.Transport
-	if proxyStr != "" {
-		proxyURL, err := url.Parse(proxyStr)
-		if err != nil {
-			logger.Warn("警告：无法解析代理 URL '%s'，将不使用代理: %v", proxyStr, err)
-		} else {
-			logger.Info("检测到代理配置，将通过 %s 发送请求", proxyURL.Host)
-			transport = &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			}
-		}
-	}
-
 	return &Client{
 		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: transport, // 如果 transport 为 nil，则使用默认 transport
+			Timeout: 30 * time.Second,
 		},
 		cookie:  cookie,
 		baseURL: baseURL,
