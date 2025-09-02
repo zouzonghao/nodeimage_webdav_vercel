@@ -81,25 +81,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const corsProxy = config.corsProxy.trim();
             const nodeimageUrl = corsProxy + config.nodeimageUrl;
+            const webdavBaseUrl = new URL(config.webdavUrl).origin;
+            const authHeader = `Basic ${btoa(`${config.webdavUser}:${config.webdavPass}`)}`;
+            const headers = { authorization: authHeader };
 
-            // 2. Create WebDAV client
-            const webdavClient = window.WebDAV.createClient(config.webdavUrl, {
-                username: config.webdavUser,
-                password: config.webdavPass,
-            });
-            log(`已创建 WebDAV 客户端，目标路径: ${config.webdavPath}`);
-
-            // 3. Get file lists
+            // 2. Get file lists
             log('🔍 正在扫描 NodeImage 图片...');
             const nodeImageFiles = await getNodeImageList(nodeimageUrl);
             log(`从 NodeImage 获取到 ${nodeImageFiles.length} 个文件。`);
 
             log('📁 正在扫描 WebDAV 目录...');
-            const webdavFiles = await getWebdavFileList(webdavClient, config.webdavPath);
+            const webdavFiles = await getWebdavFileList(webdavBaseUrl, config.webdavPath, headers);
             log(`从 WebDAV 获取到 ${webdavFiles.length} 个文件。`);
 
-            // 4. Diff files
-            const { toUpload, toDelete } = diffFiles(nodeImageFiles, webdavFiles);
+            // 3. Diff files
+            const { toUpload, toDelete } = diffFiles(nodeImageFiles, webdavFiles, config.webdavPath);
             log(`🔄 同步计划: 需要上传 ${toUpload.length} 个文件, 需要删除 ${toDelete.length} 个文件。`);
 
             if (toUpload.length === 0 && toDelete.length === 0) {
@@ -107,14 +103,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 5. Execute sync
+            // 4. Execute sync
             for (const file of toUpload) {
-                const targetPath = `${config.webdavPath}/${file.Filename}`;
+                const targetUrl = `${webdavBaseUrl}${config.webdavPath}/${file.Filename}`;
                 try {
                     log(`  - 正在下载: ${file.Filename}`);
                     const fileData = await downloadImage(corsProxy + file.URL);
-                    log(`  - 正在上传: ${file.Filename} 到 ${targetPath}`);
-                    await webdavClient.putFileContents(targetPath, fileData);
+                    log(`  - 正在上传: ${file.Filename} 到 ${targetUrl}`);
+                    await tsdav.createObject({ url: targetUrl, data: fileData, headers });
                     log(`  ✔ 上传成功: ${file.Filename}`);
                 } catch (error) {
                     log(`  ❌ 上传失败: ${file.Filename} - ${error}`, 'ERROR');
@@ -122,9 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             for (const filePath of toDelete) {
+                const targetUrl = `${webdavBaseUrl}${filePath}`;
                 try {
-                    log(`  - 正在删除: ${filePath}`);
-                    await webdavClient.deleteFile(filePath);
+                    log(`  - 正在删除: ${targetUrl}`);
+                    await tsdav.deleteObject({ url: targetUrl, headers });
                     log(`  ✔ 删除成功: ${filePath}`);
                 } catch (error) {
                     log(`  ❌ 删除失败: ${filePath} - ${error}`, 'ERROR');
@@ -145,17 +142,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const getNodeImageList = async (apiUrl) => {
         let allImages = [];
         let page = 1;
-        const limit = 100; // Fetch 100 images per page
+        const limit = 100;
 
         while (true) {
             const url = `${apiUrl}?page=${page}&limit=${limit}`;
             log(`  - 正在获取 NodeImage 第 ${page} 页...`);
             const response = await fetch(url, {
-                credentials: 'include', // <-- IMPORTANT: Auto-send cookies
+                credentials: 'include',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             if (!response.ok) {
-                throw new Error(`获取 NodeImage 列表失败: API 返回 ${response.status}。请确保您已登录 NodeImage 并且 CORS 代理工作正常。`);
+                throw new Error(`获取 NodeImage 列表失败: API 返回 ${response.status}。`);
             }
             const data = await response.json();
             allImages = allImages.concat(data.images.map(img => ({...img, Filename: new URL(img.url).pathname.split('/').pop() })));
@@ -168,37 +165,39 @@ document.addEventListener('DOMContentLoaded', () => {
         return allImages;
     };
 
-    const getWebdavFileList = async (client, path) => {
+    const getWebdavFileList = async (baseUrl, path, headers) => {
+        const url = `${baseUrl}${path}`;
         try {
-            const directoryItems = await client.getDirectoryContents(path);
-            // Filter out directories and return full paths
-            return directoryItems.filter(item => item.type === 'file').map(item => item.filename);
+            const response = await tsdav.propfind({ url, headers, depth: '1' });
+            const files = response.multistatus
+                .filter(item => item.href !== path && item.href !== `${path}/`) // Exclude the directory itself
+                .map(item => item.href);
+            return files;
         } catch (error) {
-            // If directory does not exist, create it
-            if (error.response && error.response.status === 404) {
-                log(`WebDAV 目录 ${path} 不存在，将尝试创建...`, 'WARN');
-                await client.createDirectory(path);
-                log(`目录 ${path} 创建成功。`);
-                return []; // Return empty list as it's a new directory
+            if (error.status === 404) {
+                log(`WebDAV 目录 ${url} 不存在，将尝试创建...`, 'WARN');
+                await tsdav.createCollection({ url, headers });
+                log(`目录 ${url} 创建成功。`);
+                return [];
             }
-            throw error; // Re-throw other errors
+            throw error;
         }
     };
 
-    const diffFiles = (nodeImageFiles, webdavFiles) => {
-        const webdavFileSet = new Set(webdavFiles.map(f => f.split('/').pop()));
+    const diffFiles = (nodeImageFiles, webdavFiles, webdavPath) => {
+        const webdavFileSet = new Set(webdavFiles.map(f => f.substring(f.lastIndexOf('/') + 1)));
         const nodeImageFileMap = new Map(nodeImageFiles.map(f => [f.Filename, f]));
 
         const toUpload = nodeImageFiles.filter(f => !webdavFileSet.has(f.Filename));
         
-        const toDelete = webdavFiles.filter(f => !nodeImageFileMap.has(f.split('/').pop()));
+        const toDelete = webdavFiles.filter(f => !nodeImageFileMap.has(f.substring(f.lastIndexOf('/') + 1)));
 
         return { toUpload, toDelete };
     };
 
     const downloadImage = async (url) => {
         const response = await fetch(url, {
-            credentials: 'include', // <-- IMPORTANT: Also needed for image downloads
+            credentials: 'include',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         if (!response.ok) {
@@ -207,12 +206,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return response.blob();
     };
 
-
     // --- Event Listeners ---
     saveButton.addEventListener('click', saveConfig);
     clearButton.addEventListener('click', clearConfig);
     syncButton.addEventListener('click', startSync);
 
-    // Load config on page load
     loadConfig();
 });
