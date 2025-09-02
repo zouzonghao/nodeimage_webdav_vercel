@@ -1,7 +1,18 @@
 {
-  "functions": {
-    "api/sync.go": {
-      "runtime": "@vercel/go@1.1.2"
+  "builds": [
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "api/sync.go",
+      "use": "@vercel/go"
     }
-  }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
