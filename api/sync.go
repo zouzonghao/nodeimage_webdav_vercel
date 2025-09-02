@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -15,43 +16,19 @@ import (
 	"nodeimage_webdav_vercel/pkg/webdav"
 )
 
-// sseWriter 是一个自定义的 writer，用于将日志消息格式化为 SSE 事件并写入 http.ResponseWriter。
-type sseWriter struct {
-	w http.ResponseWriter
-	f http.Flusher
-}
-
-// Write 实现了 io.Writer 接口。
-func (sw *sseWriter) Write(p []byte) (n int, err error) {
-	// 格式化为 SSE 'data' 事件
-	_, err = fmt.Fprintf(sw.w, "data: %s\n\n", p)
-	if err != nil {
-		return 0, err
-	}
-	// 立即将数据推送到客户端
-	sw.f.Flush()
-	return len(p), nil
-}
-
 // Handler 是 Vercel Serverless Function 的入口点。
 func Handler(w http.ResponseWriter, r *http.Request) {
-	// 1. 设置 SSE 所需的 HTTP 头
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*") // 允许跨域请求
+	// 允许跨域请求
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	// 获取 http.Flusher 接口，用于实时推送数据
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
+	// 创建一个 buffer 来捕获日志输出
+	logBuffer := &bytes.Buffer{}
 
-	// 2. 创建一个将日志输出到 SSE writer 的 logger
-	sseLogger := logger.New(logger.INFO, &sseWriter{w: w, f: flusher})
+	// 创建一个新的 logger，将日志写入 buffer
+	log := logger.New(logger.INFO, logBuffer)
 
-	// 3. 从环境变量加载配置
+	// 从环境变量加载配置
 	nodeImageCookie := os.Getenv("NODEIMAGE_COOKIE")
 	nodeImageApiURL := os.Getenv("NODEIMAGE_API_URL")
 	webdavURL := os.Getenv("WEBDAV_URL")
@@ -60,7 +37,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	webdavBasePath := os.Getenv("WEBDAV_BASE_PATH")
 
 	if nodeImageCookie == "" || webdavURL == "" || webdavUsername == "" || webdavPassword == "" {
-		sseLogger.Error("错误：一个或多个必要的环境变量未设置。")
+		log.Error("错误：一个或多个必要的环境变量未设置。")
+		http.Error(w, logBuffer.String(), http.StatusInternalServerError)
 		return
 	}
 	if nodeImageApiURL == "" {
@@ -70,13 +48,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		webdavBasePath = "/images"
 	}
 
-	// 4. 执行同步逻辑 (与 main 项目中的 runSync 非常相似)
-	err := runSyncLogic(r.Context(), sseLogger, nodeImageCookie, nodeImageApiURL, webdavURL, webdavUsername, webdavPassword, webdavBasePath)
+	// 执行同步逻辑
+	err := runSyncLogic(r.Context(), log, nodeImageCookie, nodeImageApiURL, webdavURL, webdavUsername, webdavPassword, webdavBasePath)
 	if err != nil {
-		sseLogger.Error("同步过程中发生错误: %v", err)
+		log.Error("同步过程中发生错误: %v", err)
 	} else {
-		sseLogger.Info("✅ 同步完成！")
+		log.Info("✅ 同步完成！")
 	}
+
+	// 将 buffer 中的所有日志作为响应返回
+	w.WriteHeader(http.StatusOK)
+	w.Write(logBuffer.Bytes())
 }
 
 // runSyncLogic 包含了核心的同步业务逻辑。
