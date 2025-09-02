@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"nodeimage_webdav_vercel/internal/logger"
-	"nodeimage_webdav_vercel/internal/stats"
+	"nodeimage_webdav_vercel/pkg/logger"
+	"nodeimage_webdav_vercel/pkg/stats"
 )
 
 // ImageInfo 代表从 NodeImage API 获取的单张图片信息。

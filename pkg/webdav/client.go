@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"nodeimage_webdav_vercel/internal/logger"
-	"nodeimage_webdav_vercel/internal/stats"
+	"nodeimage_webdav_vercel/pkg/logger"
+	"nodeimage_webdav_vercel/pkg/stats"
 )
 
 // Client 代表一个精简的、自实现的 WebDAV 客户端，仅使用 Go 标准库。

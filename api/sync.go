@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"sync"
 
-	"nodeimage_webdav_vercel/internal/logger"
-	"nodeimage_webdav_vercel/internal/nodeimage"
-	"nodeimage_webdav_vercel/internal/stats"
-	"nodeimage_webdav_vercel/internal/webdav"
+	"nodeimage_webdav_vercel/pkg/logger"
+	"nodeimage_webdav_vercel/pkg/nodeimage"
+	"nodeimage_webdav_vercel/pkg/stats"
+	"nodeimage_webdav_vercel/pkg/webdav"
 )
 
 // sseWriter 是一个自定义的 writer，用于将日志消息格式化为 SSE 事件并写入 http.ResponseWriter。
