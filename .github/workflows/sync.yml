@@ -1,0 +1,33 @@
+name: Manual Sync Trigger
+
+on:
+  # 允许通过 GitHub UI 或 API 手动触发
+  workflow_dispatch:
+
+  # 也可以设置定时任务，例如每天的 UTC 时间 0 点执行
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.18'
+
+      - name: Run sync script
+        env:
+          NODEIMAGE_COOKIE: ${{ secrets.NODEIMAGE_COOKIE }}
+          NODEIMAGE_API_URL: ${{ secrets.NODEIMAGE_API_URL }}
+          WEBDAV_URL: ${{ secrets.WEBDAV_URL }}
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
+          WEBDAV_BASE_PATH: ${{ secrets.WEBDAV_BASE_PATH }}
+          HTTP_PROXY_URL: ${{ secrets.HTTP_PROXY_URL }} # 支持代理
+        run: go run cmd/sync/main.go

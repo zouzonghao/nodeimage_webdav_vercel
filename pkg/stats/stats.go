@@ -1,106 +1,47 @@
 package stats
 
-import (
-	"math"
-)
+import "sync/atomic"
 
-type Category struct {
-	Requests     int64 `json:"requests,omitempty"`
-	Bytes        int64 `json:"bytes"`
-	Uncompressed int64 `json:"uncompressed"`
-	Compressed   int64 `json:"compressed"`
-}
-
-type Total struct {
-	Bytes             int64   `json:"bytes"`
-	Uncompressed      int64   `json:"uncompressed"`
-	Savings           int64   `json:"savings"`
-	SavingsPercentage float64 `json:"savingsPercentage"`
-}
-
-type Summary struct {
-	API      Category `json:"api"`
-	Download Category `json:"download"`
-	Upload   Category `json:"upload"`
-	Total    Total    `json:"total"`
-}
+// Stats 用于跟踪流量统计信息。
 type Stats struct {
-	APIRequests          int64
-	APIBytes             int64
-	APIUncompressed      int64
-	DownloadBytes        int64
-	DownloadUncompressed int64
-	UploadBytes          int64
-	UploadUncompressed   int64
-	CompressedAPI        int64
-	CompressedDownloads  int64
-	CompressedUploads    int64
+	apiUpload      int64
+	apiDownload    int64
+	webdavUpload   int64
+	webdavDownload int64
+	apiFailed      int64
+	webdavFailed   int64
 }
 
+// New 创建一个新的 Stats 实例。
 func New() *Stats {
 	return &Stats{}
 }
 
-func (s *Stats) Reset() {
-	*s = Stats{}
-}
-
-func (s *Stats) AddAPIStats(bytes, uncompressed int64, compressed bool) {
-	s.APIRequests++
-	s.APIBytes += bytes
-	s.APIUncompressed += uncompressed
-	if compressed {
-		s.CompressedAPI++
+// AddAPIStats 添加 API 相关的流量统计。
+func (s *Stats) AddAPIStats(upload, download int64, failed bool) {
+	atomic.AddInt64(&s.apiUpload, upload)
+	atomic.AddInt64(&s.apiDownload, download)
+	if failed {
+		atomic.AddInt64(&s.apiFailed, 1)
 	}
 }
 
-func (s *Stats) AddDownloadStats(bytes, uncompressed int64, compressed bool) {
-	s.DownloadBytes += bytes
-	s.DownloadUncompressed += uncompressed
-	if compressed {
-		s.CompressedDownloads++
+// AddWebDAVStats 添加 WebDAV 相关的流量统计。
+func (s *Stats) AddWebDAVStats(upload, download int64, failed bool) {
+	atomic.AddInt64(&s.webdavUpload, upload)
+	atomic.AddInt64(&s.webdavDownload, download)
+	if failed {
+		atomic.AddInt64(&s.webdavFailed, 1)
 	}
 }
 
-func (s *Stats) AddUploadStats(bytes, uncompressed int64, compressed bool) {
-	s.UploadBytes += bytes
-	s.UploadUncompressed += uncompressed
-	if compressed {
-		s.CompressedUploads++
-	}
-}
-
-func (s *Stats) GetSummary() Summary {
-	totalBytes := s.APIBytes + s.DownloadBytes + s.UploadBytes
-	totalUncompressed := s.APIUncompressed + s.DownloadUncompressed + s.UploadUncompressed
-	totalSavings := totalUncompressed - totalBytes
-	savingsPercentage := float64(0)
-	if totalUncompressed > 0 {
-		savingsPercentage = float64(totalSavings) / float64(totalUncompressed) * 100
-	}
-
-	return Summary{
-		API: Category{
-			Requests:     s.APIRequests,
-			Bytes:        s.APIBytes,
-			Uncompressed: s.APIUncompressed,
-			Compressed:   s.CompressedAPI,
-		},
-		Download: Category{
-			Bytes:        s.DownloadBytes,
-			Uncompressed: s.DownloadUncompressed,
-			Compressed:   s.CompressedDownloads,
-		},
-		Upload: Category{
-			Bytes:        s.UploadBytes,
-			Uncompressed: s.UploadUncompressed,
-			Compressed:   s.CompressedUploads,
-		},
-		Total: Total{
-			Bytes:             totalBytes,
-			Uncompressed:      totalUncompressed,
-			Savings:           totalSavings,
-			SavingsPercentage: math.Round(savingsPercentage*100) / 100,
-		},
-	}
+// GetStats 返回当前的统计信息。
+func (s *Stats) GetStats() (apiUp, apiDown, webdavUp, webdavDown, apiFail, webdavFail int64) {
+	apiUp = atomic.LoadInt64(&s.apiUpload)
+	apiDown = atomic.LoadInt64(&s.apiDownload)
+	webdavUp = atomic.LoadInt64(&s.webdavUpload)
+	webdavDown = atomic.LoadInt64(&s.webdavDownload)
+	apiFail = atomic.LoadInt64(&s.apiFailed)
+	webdavFail = atomic.LoadInt64(&s.webdavFailed)
+	return
 }

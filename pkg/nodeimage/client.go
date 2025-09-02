@@ -75,7 +75,6 @@ func NewClient(cookie, baseURL string, logger logger.Logger, stats *stats.Stats)
 }
 
 // TestConnection 测试与 NodeImage API 的连接是否正常。
-// 它通过尝试获取第一页的第一个图片信息来验证连接。
 func (c *Client) TestConnection(ctx context.Context) error {
 	_, err := c.getImageList(ctx, 1, 1)
 	if err != nil {
@@ -85,9 +84,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 }
 
 // GetImageList 从 NodeImage API 获取完整的图片列表。
-// 它首先进行一次调用以获取总数，然后一次性获取所有图片信息。
 func (c *Client) GetImageList(ctx context.Context) ([]ImageInfo, error) {
-	// 第一次调用，获取总图片数
 	initialResp, err := c.getImageList(ctx, 1, 1)
 	if err != nil {
 		return nil, fmt.Errorf("获取初始图片列表失败: %w", err)
@@ -96,7 +93,6 @@ func (c *Client) GetImageList(ctx context.Context) ([]ImageInfo, error) {
 		return []ImageInfo{}, nil
 	}
 
-	// 第二次调用，一次性获取所有图片
 	resp, err := c.getImageList(ctx, 1, initialResp.Pagination.TotalCount)
 	if err != nil {
 		return nil, fmt.Errorf("获取完整图片列表失败: %w", err)
@@ -104,40 +100,37 @@ func (c *Client) GetImageList(ctx context.Context) ([]ImageInfo, error) {
 	return resp.Images, nil
 }
 
-// getImageList 是一个内部辅助函数，用于调用 NodeImage 的图片列表 API。
 func (c *Client) getImageList(ctx context.Context, page, limit int) (*APIResponse, error) {
-	// 构建请求 URL
 	url := fmt.Sprintf("%s?page=%d&limit=%d", c.baseURL, page, limit)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
 
-	// 设置必要的请求头
 	req.Header.Set("Cookie", c.cookie)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 	req.Header.Set("Referer", "https://nodeimage.com/")
 
-	// 发送请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.stats.AddAPIStats(0, 0, true)
 		return nil, fmt.Errorf("执行请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// 检查响应状态码
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.stats.AddAPIStats(0, 0, true)
+		return nil, fmt.Errorf("读取响应体失败: %w", err)
+	}
+	c.stats.AddAPIStats(0, int64(len(body)), false)
+
 	if resp.StatusCode != http.StatusOK {
+		c.stats.AddAPIStats(0, 0, true)
 		return nil, fmt.Errorf("API 返回了非预期的状态码: %d", resp.StatusCode)
 	}
 
-	// 读取响应体
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应体失败: %w", err)
-	}
-
-	// 解析 JSON
 	var apiResp APIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		preview := string(body)
@@ -146,9 +139,6 @@ func (c *Client) getImageList(ctx context.Context, page, limit int) (*APIRespons
 		}
 		return nil, fmt.Errorf("解析 JSON 响应失败: %w。响应体开头: '%s'", err, preview)
 	}
-
-	// 记录 API 流量统计
-	c.stats.AddAPIStats(int64(len(body)), int64(len(body)), false)
 
 	return &apiResp, nil
 }
@@ -159,26 +149,26 @@ func (c *Client) DownloadImage(ctx context.Context, url string) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("创建下载请求失败: %w", err)
 	}
-	// 添加 Referer 头以绕过一些图床的防盗链
 	req.Header.Set("Referer", "https://nodeimage.com/")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.stats.AddAPIStats(0, 0, true)
 		return nil, fmt.Errorf("执行下载请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		c.stats.AddAPIStats(0, 0, true)
 		return nil, fmt.Errorf("下载时服务器返回了非预期的状态码: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.stats.AddAPIStats(0, 0, true)
 		return nil, fmt.Errorf("读取下载文件内容失败: %w", err)
 	}
 
-	// 记录下载流量统计
-	c.stats.AddDownloadStats(int64(len(body)), int64(len(body)), false)
-
+	c.stats.AddAPIStats(0, int64(len(body)), false)
 	return body, nil
 }

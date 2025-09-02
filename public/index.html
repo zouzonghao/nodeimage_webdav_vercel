@@ -3,47 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NodeImage WebDAV 同步 (浏览器版)</title>
+    <title>NodeImage Sync via GitHub Actions</title>
     <link rel="stylesheet" href="style.css">
-    <!-- 引入 tsdav 库 -->
-    <script src="https://cdn.jsdelivr.net/npm/tsdav@1.1.6/dist/index.js" defer></script>
-    <!-- 引入我们自己的脚本 -->
-    <script src="script.js" defer></script>
 </head>
 <body>
     <div class="container">
-        <h1>NodeImage WebDAV 同步 (浏览器版)</h1>
-        <p class="important-note"><b>重要提示:</b> 在开始同步前，请确保您已在同一个浏览器中登录了您的 NodeImage 账户。</p>
+        <h1>通过 GitHub Actions 触发同步</h1>
+        <p>在此处输入您的 GitHub 信息以手动触发同步工作流。所有凭据都应作为 Secrets 存储在您的 GitHub 仓库中。</p>
         
+        <div class="secrets-guide">
+            <h3>首次配置指南</h3>
+            <p>请在您的 GitHub 仓库的 <code>Settings > Secrets and variables > Actions</code> 页面中，添加以下 Secrets：</p>
+            <ul>
+                <li><b>必需:</b> <code>NODEIMAGE_COOKIE</code>, <code>WEBDAV_USERNAME</code>, <code>WEBDAV_PASSWORD</code>, <code>WEBDAV_BASE_PATH</code></li>
+                <li><b>可选 (有默认值):</b> <code>NODEIMAGE_API_URL</code>, <code>WEBDAV_URL</code>, <code>HTTP_PROXY_URL</code></li>
+            </ul>
+        </div>
+
         <div class="form-container">
-            <h2>配置信息</h2>
+            <h2>触发器配置</h2>
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="nodeimageUrl">NodeImage API URL</label>
-                    <input type="text" id="nodeimageUrl" placeholder="例如: https://api.nodeimage.com/api/images">
+                    <label for="githubOwner">GitHub 用户名/组织名</label>
+                    <input type="text" id="githubOwner" placeholder="例如: your-username" autocomplete="username">
                 </div>
                 <div class="form-group">
-                    <label for="webdavUrl">WebDAV URL</label>
-                    <input type="text" id="webdavUrl" placeholder="例如: https://dav.box.com/dav">
+                    <label for="githubRepo">GitHub 仓库名</label>
+                    <input type="text" id="githubRepo" placeholder="例如: nodeimage_webdav_vercel">
                 </div>
                 <div class="form-group">
-                    <label for="webdavUser">WebDAV 用户名</label>
-                    <input type="text" id="webdavUser" placeholder="您的 WebDAV 用户名">
-                </div>
-                <div class="form-group">
-                    <label for="webdavPass">WebDAV 密码</label>
-                    <input type="password" id="webdavPass" placeholder="您的 WebDAV 密码">
-                </div>
-                <div class="form-group">
-                    <label for="webdavPath">WebDAV 基础路径</label>
-                    <input type="text" id="webdavPath" placeholder="例如: /images (必须以 / 开头)">
+                    <label for="githubPat">GitHub Personal Access Token</label>
+                    <input type="password" id="githubPat" placeholder="需要 'workflow' 权限的 PAT" autocomplete="current-password">
+                    <small>需要 <code>workflow</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=workflow" target="_blank">点此创建</a></small>
                 </div>
                  <div class="form-group">
-                    <label for="corsProxy">CORS 代理</label>
-                    <input type="text" id="corsProxy" value="https://cors-anywhere.herokuapp.com/" placeholder="一个有效的 CORS 代理服务器地址">
+                    <label for="githubBranch">目标分支</label>
+                    <input type="text" id="githubBranch" value="main" placeholder="例如: main">
                 </div>
             </div>
-            <div class="button-group">
+             <div class="button-group">
                 <button id="saveButton">保存配置</button>
                 <button id="clearButton">清除配置</button>
             </div>
@@ -51,13 +49,14 @@
 
         <div class="sync-container">
             <h2>同步操作</h2>
-            <button id="syncButton">开始同步</button>
+            <button id="syncButton">触发同步</button>
         </div>
 
         <div class="logs-container">
-            <h2>日志输出:</h2>
-            <pre id="logs"></pre>
+            <h2>状态:</h2>
+            <pre id="status"></pre>
         </div>
     </div>
+    <script src="script.js"></script>
 </body>
 </html>
