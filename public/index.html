@@ -3,14 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NodeImage WebDAV 同步</title>
+    <title>NodeImage WebDAV 同步 (浏览器版)</title>
     <link rel="stylesheet" href="style.css">
+    <!-- 引入 webdav-client 库 -->
+    <script src="https://unpkg.com/webdav@5.3.0/dist/webdav.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>NodeImage WebDAV 同步</h1>
-        <p>点击下面的按钮开始将您的 NodeImage 图库同步到 WebDAV。</p>
-        <button id="syncButton">开始同步</button>
+        <h1>NodeImage WebDAV 同步 (浏览器版)</h1>
+        <p class="important-note"><b>重要提示:</b> 在开始同步前，请确保您已在同一个浏览器中登录了您的 NodeImage 账户。</p>
+        
+        <div class="form-container">
+            <h2>配置信息</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="nodeimageUrl">NodeImage API URL</label>
+                    <input type="text" id="nodeimageUrl" placeholder="例如: https://api.nodeimage.com/api/images">
+                </div>
+                <div class="form-group">
+                    <label for="webdavUrl">WebDAV URL</label>
+                    <input type="text" id="webdavUrl" placeholder="例如: https://dav.box.com/dav">
+                </div>
+                <div class="form-group">
+                    <label for="webdavUser">WebDAV 用户名</label>
+                    <input type="text" id="webdavUser" placeholder="您的 WebDAV 用户名">
+                </div>
+                <div class="form-group">
+                    <label for="webdavPass">WebDAV 密码</label>
+                    <input type="password" id="webdavPass" placeholder="您的 WebDAV 密码">
+                </div>
+                <div class="form-group">
+                    <label for="webdavPath">WebDAV 基础路径</label>
+                    <input type="text" id="webdavPath" placeholder="例如: /images (必须以 / 开头)">
+                </div>
+                 <div class="form-group">
+                    <label for="corsProxy">CORS 代理</label>
+                    <input type="text" id="corsProxy" value="https://cors-anywhere.herokuapp.com/" placeholder="一个有效的 CORS 代理服务器地址">
+                </div>
+            </div>
+            <div class="button-group">
+                <button id="saveButton">保存配置</button>
+                <button id="clearButton">清除配置</button>
+            </div>
+        </div>
+
+        <div class="sync-container">
+            <h2>同步操作</h2>
+            <button id="syncButton">开始同步</button>
+        </div>
+
         <div class="logs-container">
             <h2>日志输出:</h2>
             <pre id="logs"></pre>
