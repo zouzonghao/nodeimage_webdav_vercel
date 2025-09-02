@@ -1,14 +1,9 @@
 {
-  "builds": [
-    {
-      "src": "api/sync.go",
-      "use": "@vercel/go"
-    },
-    {
-      "src": "public/**/*",
-      "use": "@vercel/static"
+  "functions": {
+    "api/sync.go": {
+      "runtime": "@vercel/go"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/api/sync",
