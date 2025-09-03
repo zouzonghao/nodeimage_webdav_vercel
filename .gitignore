@@ -1,0 +1,11 @@
+# Local environment variables
+.env
+
+# Compiled binary
+nodeimage_webdav_vercel
+*.exe
+*.out
+*.test
+
+# OS-specific files
+.DS_Store
