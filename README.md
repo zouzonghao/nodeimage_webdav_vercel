@@ -120,7 +120,8 @@ Web UI 通过 `main.go` 中定义的 API 与后端通信：
 | `WEBDAV_PASSWORD` | **必需**。您的 WebDAV **应用专用密码**，通常需要在服务提供商的安全设置中生成。 | |
 | `WEBDAV_FOLDER` | **必需**。指定在 WebDAV 根目录下用于存放图片的文件夹路径，以 `/` 开头。 | |
 | `NODEIMAGE_API_URL` | NodeImage 的图片列表 API 地址 (Cookie 模式使用)。 | `https://api.nodeimage.com/api/images` |
-| `PORT` | 本地运行时监听的端口。 | `373732` |
+| `PORT` | 本地运行时监听的端口。 | `373722` |
 | `SYNC_INTERVAL` | 自动**增量**同步的间隔分钟数。设为 `0` 则禁用。 | `0` |
 | `SYNC_CONCURRENCY` | 上传/删除操作的并发线程数。 | `5` |
 | `LOG_LEVEL` | 应用的日志级别，可选 `debug`, `info`, `warn`, `error`。 | `info` |
+| `PASSWORD` | 网页的登录密码，用于保护 Web UI。 |  |

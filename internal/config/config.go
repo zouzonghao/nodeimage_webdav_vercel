@@ -19,6 +19,7 @@ type Config struct {
 	SyncInterval    int    // 定时增量同步的间隔（分钟）
 	LogLevel        string // 日志级别 (e.g., "info", "debug")
 	Port            string // Web 服务器监听的端口
+	Password        string // 用于访问 Web 界面的密码
 }
 
 // LoadConfig 从环境变量加载配置，并应用默认值。
@@ -34,7 +35,8 @@ func LoadConfig() *Config {
 		SyncConcurrency: getEnvAsInt("SYNC_CONCURRENCY", 5),
 		SyncInterval:    getEnvAsInt("SYNC_INTERVAL", 0), // 0 表示禁用定时同步
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		Port:            getEnv("PORT", "37373"),
+		Port:            getEnv("PORT", "37372"),
+		Password:        os.Getenv("PASSWORD"),
 	}
 	return cfg
 }

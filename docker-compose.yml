@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  nodeimage_webdav_webui:
+    image: sanqi37/nodeimage_webdav_webui:latest
+    restart: unless-stopped
+    container_name: nodeimage_webdav_webui
+    environment:
+      # NodeImage 的 Cookie 和 API Key
+      - NODEIMAGE_COOKIE=your_nodeimage_cookie_here
+      - NODEIMAGE_API_KEY=your_nodeimage_api_key_here
+      # WebDav 的网址
+      - WEBDAV_URL=your_webdav_url_here
+      # WebDav 的用户名和密码
+      - WEBDAV_USERNAME=your_webdav_username_here
+      - WEBDAV_PASSWORD=your_webdav_password_here
+      # WebDav 的保存目录
+      - WEBDAV_FOLDER=/your/webdav/folder
+      # WebUI 的登录密码
+      - PASSWORD=your_secret_password_here
+      # 定时同步间隔，0 表示禁用定时同步（分钟）
+      - SYNC_INTERVAL=0   
+      # --- 可选配置 ---
+      # - SYNC_CONCURRENCY=5
+      # - LOG_LEVEL=info
+    ports:
+      - "37372:37372"
+      

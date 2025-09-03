@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"nodeimage_webdav_webui/pkg/stats"
 	"nodeimage_webdav_webui/pkg/websocket"
 
+	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 )
 
@@ -26,6 +28,7 @@ var (
 	st          *stats.Stats
 	syncMutex   sync.Mutex
 	httpClient  *http.Client
+	store       *sessions.CookieStore
 )
 
 func main() {
@@ -34,6 +37,10 @@ func main() {
 	}
 
 	appConfig = config.LoadConfig()
+
+	if appConfig.Password != "" {
+		store = sessions.NewCookieStore([]byte("secret-key")) // 在生产环境中应使用更安全的密钥
+	}
 
 	logLevel := logger.StringToLogLevel(appConfig.LogLevel)
 	log = logger.New(logLevel, os.Stdout)
@@ -71,17 +78,104 @@ func main() {
 		}()
 	}
 
-	http.Handle("/", http.FileServer(http.Dir("./public")))
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	fs := http.FileServer(http.Dir("./public"))
+	mux.Handle("/", authMiddleware(fs))
+
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(hub, w, r)
 	})
-	http.HandleFunc("/api/sync", syncHandler)
-	http.HandleFunc("/api/config", configHandler)
+	mux.HandleFunc("/login", loginHandler)
+	mux.Handle("/api/sync", authMiddleware(http.HandlerFunc(syncHandler)))
+	mux.Handle("/api/config", authMiddleware(http.HandlerFunc(configHandler)))
+	mux.HandleFunc("/api/check-auth", checkAuthHandler)
 
 	log.Info("服务器启动，监听端口: %s", appConfig.Port)
-	if err := http.ListenAndServe(":"+appConfig.Port, nil); err != nil {
+	if err := http.ListenAndServe(":"+appConfig.Port, mux); err != nil {
 		log.Error("服务器启动失败: %v", err)
 	}
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if appConfig.Password == "" {
+		http.Error(w, "未设置密码，无需登录", http.StatusBadRequest)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "只允许 POST 方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var creds struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "无效的请求", http.StatusBadRequest)
+		return
+	}
+
+	if creds.Password != appConfig.Password {
+		http.Error(w, "密码错误", http.StatusUnauthorized)
+		return
+	}
+
+	session, _ := store.Get(r, "session-name")
+	session.Values["authenticated"] = true
+	err := session.Save(r, w)
+	if err != nil {
+		log.Error("保存 session 失败: %v", err)
+		http.Error(w, "无法保存 session", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func checkAuthHandler(w http.ResponseWriter, r *http.Request) {
+	if appConfig.Password == "" {
+		json.NewEncoder(w).Encode(map[string]bool{"authenticated": true})
+		return
+	}
+
+	session, _ := store.Get(r, "session-name")
+	auth, ok := session.Values["authenticated"].(bool)
+	if !ok || !auth {
+		json.NewEncoder(w).Encode(map[string]bool{"authenticated": false})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]bool{"authenticated": true})
+}
+
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if appConfig.Password == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 允许访问登录页面和其中的静态资源
+		if r.URL.Path == "/login.html" {
+			http.ServeFile(w, r, "./public/login.html")
+			return
+		}
+
+		session, _ := store.Get(r, "session-name")
+		auth, ok := session.Values["authenticated"].(bool)
+
+		if !ok || !auth {
+			// 如果是 API 请求，返回 401
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				http.Error(w, "未授权", http.StatusUnauthorized)
+				return
+			}
+			// 否则重定向到登录页
+			http.Redirect(w, r, "/login.html", http.StatusFound)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func syncHandler(w http.ResponseWriter, r *http.Request) {

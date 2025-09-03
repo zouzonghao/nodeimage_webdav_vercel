@@ -14,7 +14,7 @@ COPY main ./
 COPY public ./public
 
 # 暴露端口
-EXPOSE 37373
+EXPOSE 37372
 
 # 设置容器启动时执行的命令
 CMD ["./main"]
