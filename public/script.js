@@ -1,124 +1,147 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
-    const configInputs = {
-        githubOwner: document.getElementById('githubOwner'),
-        githubRepo: document.getElementById('githubRepo'),
-        githubPat: document.getElementById('githubPat'),
-        githubBranch: document.getElementById('githubBranch'),
-    };
-    const saveButton = document.getElementById('saveButton');
-    const clearButton = document.getElementById('clearButton');
-    const syncButton = document.getElementById('syncButton');
-    const statusContainer = document.getElementById('status');
+    // --- 元素选择器 ---
+    const incrementalSyncBtn = document.getElementById('incremental-sync-btn');
+    const fullSyncBtn = document.getElementById('full-sync-btn');
+    const cookieInput = document.getElementById('cookie-input');
+    const saveCookieBtn = document.getElementById('save-cookie-btn');
+    const syncActionMessage = document.getElementById('sync-action-message');
+    const configActionMessage = document.getElementById('config-action-message');
+    const logContainer = document.getElementById('log-container');
+    const clearLogBtn = document.getElementById('clear-log-btn');
 
-    // --- Logger ---
-    const updateStatus = (message, isError = false, isHtml = false) => {
-        const timestamp = new Date().toISOString();
-        const prefix = `[${timestamp}] `;
-        
-        if (isHtml) {
-            statusContainer.innerHTML = `${prefix}${message}`;
+    let ws;
+
+    // --- WebSocket 核心逻辑 ---
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+        ws.onopen = () => {
+            appendLog('WebSocket 连接成功', 'info');
+            checkCookieStatus();
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            switch (message.type) {
+                case 'log':
+                    const logEntry = document.createElement('p');
+                    logEntry.innerHTML = message.content;
+                    logContainer.appendChild(logEntry);
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                    break;
+                case 'syncStatus':
+                    setSyncing(message.content === 'syncing');
+                    break;
+                case 'syncResult':
+                    // 可以在这里添加一个最终的摘要日志，如果需要的话
+                    break;
+            }
+        };
+
+        ws.onclose = () => {
+            appendLog('WebSocket 连接断开，3秒后尝试重连...', 'error');
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            appendLog('WebSocket 连接错误', 'error');
+        };
+    }
+
+    // --- UI 控制 ---
+    function setSyncing(syncing) {
+        incrementalSyncBtn.disabled = syncing;
+        fullSyncBtn.disabled = syncing;
+        saveCookieBtn.disabled = syncing;
+        if (syncing) {
+            incrementalSyncBtn.textContent = '增量同步中...';
+            fullSyncBtn.textContent = '全量同步中...';
         } else {
-            statusContainer.textContent = `${prefix}${message}\n`;
+            incrementalSyncBtn.textContent = '增量同步 (API Key)';
+            fullSyncBtn.textContent = '全量同步 (Cookie)';
         }
+    }
 
-        if (isError) {
-            statusContainer.style.color = 'red';
-        } else {
-            statusContainer.style.color = 'green';
+    function showActionMessage(element, message, type) {
+        element.textContent = message;
+        element.className = `action-message msg-${type}`;
+        element.style.display = 'block';
+        setTimeout(() => {
+            element.style.display = 'none';
+        }, 3000);
+    }
+
+    // --- 日志辅助函数 ---
+    function appendLog(message, level) {
+        const logEntry = document.createElement('p');
+        logEntry.className = `log-${level.toUpperCase()}`;
+        logEntry.textContent = `[${new Date().toLocaleTimeString()}] [${level.toUpperCase()}] ${message}`;
+        logContainer.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // --- API 调用 ---
+    async function triggerSync(isFull = false) {
+        let url = '/api/sync';
+        if (isFull) {
+            url += '?mode=full';
         }
-        console.log(message);
-    };
-
-    // --- Config Management ---
-    const saveConfig = () => {
+        showActionMessage(syncActionMessage, '同步任务已启动...', 'info');
         try {
-            const config = {};
-            for (const key in configInputs) {
-                config[key] = configInputs[key].value;
-            }
-            localStorage.setItem('githubConfig', JSON.stringify(config));
-            updateStatus('配置已保存到浏览器本地存储。');
+            const response = await fetch(url, { method: 'POST' });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         } catch (error) {
-            updateStatus(`保存配置失败: ${error}`, true);
+            console.error('Failed to trigger sync:', error);
+            showActionMessage(syncActionMessage, '启动同步失败', 'error');
         }
-    };
+    }
 
-    const loadConfig = () => {
+    async function checkCookieStatus() {
         try {
-            const savedConfig = localStorage.getItem('githubConfig');
-            if (savedConfig) {
-                const config = JSON.parse(savedConfig);
-                for (const key in config) {
-                    if (configInputs[key]) {
-                        configInputs[key].value = config[key];
-                    }
-                }
-                updateStatus('已从浏览器本地存储加载配置。');
-            }
+            const response = await fetch('/api/config');
+            const config = await response.json();
+            cookieInput.placeholder = config.isCookieSet 
+                ? "后端已配置 Cookie，可在此处覆盖" 
+                : "后端未配置 Cookie，请在此处输入";
         } catch (error) {
-            updateStatus(`加载配置失败: ${error}`, true);
+            console.error('Failed to check cookie status:', error);
         }
-    };
+    }
 
-    const clearConfig = () => {
-        if (confirm('确定要清除所有已保存的 GitHub 配置吗？')) {
-            for (const key in configInputs) {
-                configInputs[key].value = '';
-            }
-            localStorage.removeItem('githubConfig');
-            updateStatus('已清除本地存储的配置。');
+    async function saveCookie() {
+        const cookie = cookieInput.value.trim();
+        if (!cookie) {
+            showActionMessage(configActionMessage, 'Cookie 不能为空', 'error');
+            return;
         }
-    };
-
-    // --- Core Sync Logic ---
-    const triggerSync = async () => {
-        syncButton.disabled = true;
-        syncButton.textContent = '触发中...';
-        statusContainer.style.color = 'inherit';
-        updateStatus('正在向 GitHub API 发送请求...');
-
         try {
-            const { githubOwner, githubRepo, githubPat, githubBranch } = configInputs;
-            if (!githubOwner.value || !githubRepo.value || !githubPat.value || !githubBranch.value) {
-                throw new Error('配置不完整，请填写所有 GitHub 相关信息。');
-            }
-
-            const workflowFileName = 'sync.yml';
-            const url = `https://api.github.com/repos/${githubOwner.value}/${githubRepo.value}/actions/workflows/${workflowFileName}/dispatches`;
-
-            const response = await fetch(url, {
+            const response = await fetch('/api/config', {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Authorization': `token ${githubPat.value}`,
-                },
-                body: JSON.stringify({
-                    ref: githubBranch.value,
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cookie }),
             });
-
-            if (response.status === 204) {
-                const repoUrl = `https://github.com/${githubOwner.value}/${githubRepo.value}/actions`;
-                const successMessage = `成功！同步工作流已触发。<br>请前往 <a href="${repoUrl}" target="_blank">GitHub Actions 页面</a> 查看日志。`;
-                updateStatus(successMessage, false, true);
+            if (response.ok) {
+                showActionMessage(configActionMessage, 'Cookie 已成功在后端更新', 'success');
             } else {
-                const errorText = await response.text();
-                throw new Error(`GitHub API 返回错误 ${response.status}: ${errorText}`);
+                throw new Error('Failed to save cookie');
             }
-
         } catch (error) {
-            updateStatus(`触发失败: ${error}`, true);
-        } finally {
-            syncButton.disabled = false;
-            syncButton.textContent = '触发同步';
+            console.error('Failed to save cookie:', error);
+            showActionMessage(configActionMessage, '保存 Cookie 失败', 'error');
         }
-    };
+    }
 
-    // --- Event Listeners ---
-    saveButton.addEventListener('click', saveConfig);
-    clearButton.addEventListener('click', clearConfig);
-    syncButton.addEventListener('click', triggerSync);
+    // --- 事件监听 ---
+    incrementalSyncBtn.addEventListener('click', () => triggerSync(false));
+    fullSyncBtn.addEventListener('click', () => triggerSync(true));
+    saveCookieBtn.addEventListener('click', saveCookie);
+    clearLogBtn.addEventListener('click', () => {
+        logContainer.innerHTML = '';
+        appendLog('日志已清除', 'info');
+    });
 
-    loadConfig();
+    // --- 初始加载 ---
+    connectWebSocket();
 });

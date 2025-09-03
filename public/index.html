@@ -3,60 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NodeImage Sync via GitHub Actions</title>
+    <title>NodeImage WebDAV</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
 </head>
 <body>
-    <div class="container">
-        <h1>通过 GitHub Actions 触发同步</h1>
-        <p>在此处输入您的 GitHub 信息以手动触发同步工作流。所有凭据都应作为 Secrets 存储在您的 GitHub 仓库中。</p>
-        
-        <div class="secrets-guide">
-            <h3>首次配置指南</h3>
-            <p>请在您的 GitHub 仓库的 <code>Settings > Secrets and variables > Actions</code> 页面中，添加以下 Secrets：</p>
-            <ul>
-                <li><b>必需:</b> <code>NODEIMAGE_COOKIE</code>, <code>WEBDAV_USERNAME</code>, <code>WEBDAV_PASSWORD</code>, <code>WEBDAV_BASE_PATH</code></li>
-                <li><b>可选 (有默认值):</b> <code>NODEIMAGE_API_URL</code>, <code>WEBDAV_URL</code></li>
-            </ul>
-        </div>
+    <div id="app">
+        <header>
+            <h1>NodeImage WebDAV</h1>
+            <p>NodeImage备份同步服务管理面板</p>
+        </header>
 
-        <div class="form-container">
-            <h2>触发器配置</h2>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="githubOwner">GitHub 用户名/组织名</label>
-                    <input type="text" id="githubOwner" placeholder="例如: your-username" autocomplete="username">
+        <main>
+            <section class="card">
+                <div class="card-header">
+                    <h2>实时日志</h2>
+                    <button id="clear-log-btn" class="btn-icon">
+                        清除日志
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label for="githubRepo">GitHub 仓库名</label>
-                    <input type="text" id="githubRepo" placeholder="例如: nodeimage_webdav_vercel">
-                </div>
-                <div class="form-group">
-                    <label for="githubPat">GitHub Personal Access Token</label>
-                    <input type="password" id="githubPat" placeholder="需要 'repo' 权限的 PAT" autocomplete="current-password">
-                    <small>需要 <code>repo</code> (完全控制私有仓库) 权限才能触发工作流。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank">点此创建</a></small>
-                </div>
-                 <div class="form-group">
-                    <label for="githubBranch">目标分支</label>
-                    <input type="text" id="githubBranch" value="main" placeholder="例如: main">
-                </div>
+                <div id="log-container"></div>
+            </section>
+
+            <div class="controls-grid">
+                <section class="card">
+                    <h2>手动操作</h2>
+                    <div class="actions-container">
+                        <button id="incremental-sync-btn" class="btn-primary">
+                            增量同步 (API Key)
+                        </button>
+                        <button id="full-sync-btn" class="btn-danger">
+                            全量同步 (Cookie)
+                        </button>
+                    </div>
+                    <div class="sync-description">
+                        <p><strong>增量同步:</strong> 扫描 NodeImage 中最新的50张图片，验证 webdav 中是否存在。此操作仅添加新图片，不会修改或删除 WebDAV 上的已有的图片。</p>
+                        <p><strong>全量同步:</strong> 对比 NodeImage 中的所有图片与 WebDAV 中的内容，执行完全同步。此操作将确保 WebDAV 的图片与 NodeImage 完全一致，包括添加缺失的图片和删除多余的文件。</p>
+                    </div>
+                    <div id="sync-action-message" class="action-message"></div>
+                </section>
+    
+                <section class="card">
+                    <h2>NodeImage Cookie (用于全量同步)</h2>
+                    <div class="cookie-setting">
+                        <a href="https://www.nodeimage.com/" target="_blank">前往 NodeImage 获取 Cookie</a>
+                        <textarea id="cookie-input" rows="4" placeholder="可在此处覆盖后端设置的 Cookie"></textarea>
+                    </div>
+                    <button id="save-cookie-btn" class="btn-secondary">
+                        保存 Cookie
+                    </button>
+                    <div id="config-action-message" class="action-message"></div>
+                </section>
             </div>
-             <div class="button-group">
-                <button id="saveButton">保存配置</button>
-                <button id="clearButton">清除配置</button>
-            </div>
-        </div>
-
-        <div class="sync-container">
-            <h2>同步操作</h2>
-            <button id="syncButton">触发同步</button>
-        </div>
-
-        <div class="logs-container">
-            <h2>状态:</h2>
-            <pre id="status"></pre>
-        </div>
+        </main>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
