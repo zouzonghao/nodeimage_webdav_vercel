@@ -37,12 +37,12 @@ type FileInfo struct {
 }
 
 // NewClient 创建并返回一个新的 WebDAV 客户端实例。
-func NewClient(url, username, password string, stats *stats.Stats, log logger.Logger) *Client {
+func NewClient(url, username, password string, stats *stats.Stats, log logger.Logger, httpClient *http.Client) *Client {
 	return &Client{
 		baseURL:    url,
 		username:   username,
 		password:   password,
-		httpClient: &http.Client{},
+		httpClient: httpClient,
 		stats:      stats,
 		log:        log,
 	}

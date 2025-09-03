@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"nodeimage_webdav_webui/pkg/logger"
 	"nodeimage_webdav_webui/pkg/stats"
@@ -72,15 +71,13 @@ type Client struct {
 }
 
 // NewClient 创建一个新的 NodeImage API 客户端实例。
-func NewClient(cookie, baseURL string, logger logger.Logger, stats *stats.Stats) *Client {
+func NewClient(cookie, baseURL string, logger logger.Logger, stats *stats.Stats, httpClient *http.Client) *Client {
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		cookie:  cookie,
-		baseURL: baseURL,
-		logger:  logger,
-		stats:   stats,
+		httpClient: httpClient,
+		cookie:     cookie,
+		baseURL:    baseURL,
+		logger:     logger,
+		stats:      stats,
 	}
 }
 

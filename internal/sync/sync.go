@@ -5,6 +5,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -18,14 +19,11 @@ import (
 // --- WebDAV 列表缓存 ---
 
 var (
-	// webdavCache 在内存中缓存 WebDAV 文件列表，避免在文件无变化时重复请求。
 	webdavCache []webdav.FileInfo
-	// cacheMutex 保护对 webdavCache 的并发读写。
-	cacheMutex sync.RWMutex
+	cacheMutex  sync.RWMutex
 )
 
 // InvalidateWebdavCache 用于在文件系统发生变化（上传或删除）后清空缓存。
-// 这是一个导出的函数，以便在需要时可以从其他包调用。
 func InvalidateWebdavCache() {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
@@ -36,13 +34,14 @@ func InvalidateWebdavCache() {
 
 // Config 聚合了执行一次同步所需的所有配置项。
 type Config struct {
-	NodeImageCookie string // 用于全量同步
-	NodeImageAPIKey string // 用于增量同步
-	NodeImageAPIURL string // NodeImage Cookie API 的基础 URL
+	NodeImageCookie string
+	NodeImageAPIKey string
+	NodeImageAPIURL string
 	WebdavURL       string
 	WebdavUsername  string
 	WebdavPassword  string
-	WebdavBasePath  string // WebDAV 上的同步根目录
+	WebdavBasePath  string
+	SyncConcurrency int
 }
 
 // Result 包含了单次同步任务执行完成后的详细结果。
@@ -61,7 +60,7 @@ type Result struct {
 }
 
 // RunSync 是执行同步流程的主函数。
-func RunSync(ctx context.Context, log logger.Logger, config Config, isFullSync bool) Result {
+func RunSync(ctx context.Context, log logger.Logger, config Config, isFullSync bool, httpClient *http.Client) Result {
 	startTime := time.Now()
 	syncMode := "增量同步"
 	if isFullSync {
@@ -84,8 +83,8 @@ func RunSync(ctx context.Context, log logger.Logger, config Config, isFullSync b
 		config.WebdavURL = "https://dav.jianguoyun.com/dav"
 	}
 	stats := stats.New()
-	nodeImageClient := nodeimage.NewClient(config.NodeImageCookie, config.NodeImageAPIURL, log, stats)
-	webdavClient := webdav.NewClient(config.WebdavURL, config.WebdavUsername, config.WebdavPassword, stats, log)
+	nodeImageClient := nodeimage.NewClient(config.NodeImageCookie, config.NodeImageAPIURL, log, stats, httpClient)
+	webdavClient := webdav.NewClient(config.WebdavURL, config.WebdavUsername, config.WebdavPassword, stats, log, httpClient)
 
 	// --- 步骤 2: 扫描文件 ---
 	log.Info("[2/3] 扫描远程文件...")
@@ -182,7 +181,7 @@ func RunSync(ctx context.Context, log logger.Logger, config Config, isFullSync b
 	}
 
 	var wg sync.WaitGroup
-	guard := make(chan struct{}, 5)
+	guard := make(chan struct{}, config.SyncConcurrency)
 	var uploadCount, deleteCount int
 	var uploadErrCount, deleteErrCount int
 
@@ -278,17 +277,22 @@ func diffFiles(nodeImageFiles []nodeimage.ImageInfo, webdavFiles []string) (toUp
 }
 
 // uploadFile 封装了单个文件的下载和上传流程。
+// 通过流式处理，它能以极低的内存占用处理大文件。
 func uploadFile(ctx context.Context, file nodeimage.ImageInfo, niClient *nodeimage.Client, wdClient *webdav.Client, basePath string, log logger.Logger) error {
-	data, err := niClient.DownloadImage(ctx, file.URL)
+	// 步骤 1: 获取图片数据流，而不是完整的字节数组
+	imageStream, err := niClient.DownloadImageStream(ctx, file.URL)
 	if err != nil {
-		return fmt.Errorf("下载失败: %w", err)
+		return fmt.Errorf("开始下载失败: %w", err)
+	}
+	defer imageStream.Close() // 确保数据流被关闭
+
+	// 步骤 2: 使用流式上传 API
+	targetPath := filepath.Join(basePath, file.Filename)
+	err = wdClient.UploadFileStream(ctx, targetPath, imageStream, file.Size)
+	if err != nil {
+		return fmt.Errorf("流式上传失败: %w", err)
 	}
 
-	targetPath := filepath.Join(basePath, file.Filename)
-	err = wdClient.UploadFile(ctx, targetPath, data)
-	if err != nil {
-		return fmt.Errorf("上传失败: %w", err)
-	}
 	log.Info("  -> ✅ 上传成功: %s", file.Filename)
 	return nil
 }
